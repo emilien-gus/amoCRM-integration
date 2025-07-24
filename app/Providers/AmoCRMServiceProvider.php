@@ -5,7 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use AmoCRM\Client\AmoCRMApiClient;
 use AmoCRM\Client\LongLivedAccessToken;
-use AmoCRM\Exceptions\AmoCRMApiException;
+use Illuminate\Support\Facades\Log;
 
 class AmoCRMServiceProvider extends ServiceProvider
 {
@@ -18,13 +18,12 @@ class AmoCRMServiceProvider extends ServiceProvider
             $accessToken = config('amocrm.access_token');
             $accountUrl = config('amocrm.account_url');
 
+            $apiClient = new AmoCRMApiClient();
             $token = new LongLivedAccessToken($accessToken);
 
-            $apiClient = new AmoCRMApiClient();
             $apiClient->setAccessToken($token)
                       ->setAccountBaseDomain($accountUrl);
 
-            $apiClient->getHttpClientOptions()->setVerify(false);
             return $apiClient;
         });
     }
