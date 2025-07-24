@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\AmoLeadService;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\ProcessWebhookjob;
 
 class AmoLeadController extends Controller
 {
@@ -34,14 +35,22 @@ class AmoLeadController extends Controller
 
     public function webhookHandler(Request $request)
     {
-        $amoLeadService = app(AmoLeadService::class);
-
         $raw = file_get_contents('php://input');
         parse_str($raw, $parsed);
 
         $leadId = $parsed['leads']['update'][0]['id'] ?? null;
         $updateDateFieldId = $request->input('update_date_field_id');
         $updateTextFieldId = $request->input('update_text_field_id');
-        $amoLeadService->updateFromWebhook($leadId, $updateDateFieldId, $updateTextFieldId);
+
+        // Валидация
+        if (!$leadId || !$updateDateFieldId || !$updateTextFieldId) {
+            Log::warning('Webhook: отсутствуют обязательные параметры');
+            return response()->json(['error' => 'Missing required parameters'], 400);
+        }
+
+        // Запускаем job асинхронно
+        ProcessWebhookjob::dispatch($leadId, $updateDateFieldId, $updateTextFieldId);
+
+        return response()->json(['status' => 'accepted'], 200);
     }
 }
