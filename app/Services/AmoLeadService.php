@@ -21,6 +21,7 @@ use AmoCRM\Models\CustomFieldsValues\ValueModels\NumericCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\DateCustomFieldValueModel;
 use AmoCRM\Models\CustomFieldsValues\ValueModels\SelectCustomFieldValueModel;
 use Carbon\Carbon;
+use AmoCRM\Exceptions\AmoCRMApiNoContentException;
 use Illuminate\Support\Facades\Log;
 
 class AmoLeadService{
@@ -90,10 +91,13 @@ class AmoLeadService{
         $amoClient = app(AmoCRMApiClient::class);
         try {
             $lead = $amoClient->leads()->getOne($id);
-        } catch (AmoCRMApiException $e) {
-            printError($e);
-            die;
-        }        
+            } catch (AmoCRMApiNoContentException $e) {
+                Log::warning("Сделка с ID $id не найдена");
+                return null; // или throw, или response()->json(['error' => ...])
+            } catch (AmoCRMApiException $e) {
+                Log::error("Ошибка AmoCRM API: " . $e->getMessage());
+                return null;
+        }
         // Получаем коллекцию или создаём новую
         $customFields = $lead->getCustomFieldsValues() ?? new CustomFieldsValuesCollection();
 
@@ -139,5 +143,31 @@ class AmoLeadService{
         // Применим обновлённые поля и сохраним сделку
         $lead->setCustomFieldsValues($customFields);
         $amoClient->leads()->updateOne($lead);
+    }
+
+    public function getCustomFieldValueById(int $leadId, int $fieldId){
+        $amoClient = app(AmoCRMApiClient::class);
+        try {
+            $lead = $amoClient->leads()->getOne($leadId);
+            } catch (AmoCRMApiNoContentException $e) {
+                Log::warning("Сделка с ID $leadId не найдена");
+                return null; // или throw, или response()->json(['error' => ...])
+            } catch (AmoCRMApiException $e) {
+                Log::error("Ошибка AmoCRM API: " . $e->getMessage());
+                return null;
+        }
+        $customFields = $lead->getCustomFieldsValues();
+        if (!$customFields) {
+            return null;
+        }
+
+        $field = $customFields->getBy('fieldId', $fieldId);
+        if (!$field || !$field->getValues()) {
+            return null;
+        }
+
+        // Получаем первое значение поля
+        $valueModel = $field->getValues()->first();
+        return $valueModel->getValue();
     }
 }

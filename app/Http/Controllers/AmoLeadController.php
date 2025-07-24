@@ -17,4 +17,10 @@ class AmoLeadController extends Controller
         $amoLeadService = app(AmoLeadService::class);
         $amoLeadService->updateLeadDates($id);
     }
+    public function getCustomFieldValue(Request $request, int $leadId, int $fieldId){
+        $amoLeadService = app(AmoLeadService::class);
+        $fieldValue = $amoLeadService->getCustomFieldValueById($leadId, $fieldId);
+
+        return response()->json(['field_value' => $fieldValue]);
+    }
 }
