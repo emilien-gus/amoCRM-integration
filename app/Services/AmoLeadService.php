@@ -241,4 +241,53 @@ class AmoLeadService{
         $amoClient->leads()->updateOne($lead);        
     }
 
+    public function updateFromWebhook(int $leadId, int $updateDateFieldId, int $updateTextFieldId)
+    {
+        $amoClient = app(AmoCRMApiClient::class);
+        try {
+            $lead = $amoClient->leads()->getOne($leadId);
+        } catch (AmoCRMApiNoContentException $e) {
+            Log::warning("Сделка с ID $leadId не найдена");
+            return null; // или throw, или response()->json(['error' => ...])
+        } catch (AmoCRMApiException $e) {
+            Log::error("Ошибка AmoCRM API: " . $e->getMessage());
+            return null;
+        }
+
+        $customFields = $lead->getCustomFieldsValues();
+        if (!$customFields) {
+            return null;
+        }
+        $customFields = $lead->getCustomFieldsValues() ?? new CustomFieldsValuesCollection();
+
+        // --- Обновим поле даты  ---
+        $dateField = $customFields->getBy('fieldId', $updateDateFieldId);
+        if (!$dateField) {
+            $dateField = (new DateCustomFieldValuesModel())->setFieldId($updateDateFieldId);
+            $customFields->add($dateField);
+        }
+
+        $dateField->setValues(
+            (new DateCustomFieldValueCollection())->add(
+                (new DateCustomFieldValueModel())->setValue(Carbon::today())
+            )
+        );
+
+        // --- Обновим поле текста  ---
+        $textField = $customFields->getBy('fieldId', $updateTextFieldId);
+        if (!$textField) {
+            $textField = (new TextCustomFieldValuesModel())->setFieldId($updateTextFieldId);
+            $customFields->add($textField);
+        }
+
+        $textField->setValues(
+            (new TextCustomFieldValueCollection())->add(
+                (new TextCustomFieldValueModel())->setValue(now()->toIso8601String())
+            )
+        );
+
+        // Применим обновлённые поля и сохраним сделку
+        $lead->setCustomFieldsValues($customFields);
+        $amoClient->leads()->updateOne($lead);
+    }
 }
