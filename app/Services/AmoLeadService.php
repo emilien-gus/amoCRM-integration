@@ -151,7 +151,7 @@ class AmoLeadService{
             $lead = $amoClient->leads()->getOne($leadId);
             } catch (AmoCRMApiNoContentException $e) {
                 Log::warning("Сделка с ID $leadId не найдена");
-                return null; // или throw, или response()->json(['error' => ...])
+                return null;
             } catch (AmoCRMApiException $e) {
                 Log::error("Ошибка AmoCRM API: " . $e->getMessage());
                 return null;
@@ -170,4 +170,75 @@ class AmoLeadService{
         $valueModel = $field->getValues()->first();
         return $valueModel->getValue();
     }
+
+    public function sumFields(int $leadId, int $fieldAId, int $fieldBId, int $resultFieldId){
+        $amoClient = app(AmoCRMApiClient::class);
+        try {
+            $lead = $amoClient->leads()->getOne($leadId);
+            } catch (AmoCRMApiNoContentException $e) {
+                Log::warning("Сделка с ID $leadId не найдена");
+                return null; // или throw, или response()->json(['error' => ...])
+            } catch (AmoCRMApiException $e) {
+                Log::error("Ошибка AmoCRM API: " . $e->getMessage());
+                return null;
+        }
+        
+        $customFields = $lead->getCustomFieldsValues();
+        if (!$customFields) {
+            return null;
+        }
+
+        $fieldA = $customFields->getBy('fieldId', $fieldAId);
+        $fieldB = $customFields->getBy('fieldId', $fieldBId);
+        if(!$fieldA || !$fieldB){
+            return null;
+        }
+
+        $fieldAValueCollection = $fieldA->getValues();
+        $fieldBValueCollection = $fieldB->getValues();
+
+        $isNumericPair = ($fieldAValueCollection instanceof NumericCustomFieldValueCollection) && ($fieldBValueCollection instanceof NumericCustomFieldValueCollection);
+        $isTextPair = ($fieldAValueCollection instanceof TextCustomFieldValueCollection) && ($fieldBValueCollection instanceof TextCustomFieldValueCollection);
+
+        $valueA = $fieldAValueCollection->first()->getValue();
+        $valueB = $fieldBValueCollection->first()->getValue();
+        if (!$valueA || !$valueB){
+            return null;
+        }
+
+        if ($isNumericPair){
+            $result = $valueA + $valueB;
+            $resultField = $customFields->getBy('fieldId', $resultFieldId);
+            if (!$resultField) {
+                $resultField = (new NumericCustomFieldValuesModel())->setFieldId($resultFieldId);
+                $customFields->add($resultField);
+            }
+
+            $resultField->setValues(
+                (new NumericCustomFieldValueCollection())->add(
+                    (new NumericCustomFieldValueModel())->setValue($result)
+                )
+            );
+        }else if ($isTextPair){
+            $result = $valueA . $valueB;
+            $resultField = $customFields->getBy('fieldId', $resultFieldId);
+            if (!$resultField) {
+                $resultField = (new TextCustomFieldValuesModel())->setFieldId($resultFieldId);
+                $customFields->add($resultField);
+            }
+
+            $resultField->setValues(
+                (new TextCustomFieldValueCollection())->add(
+                    (new TextCustomFieldValueModel())->setValue($result)
+                )
+            );
+        }else{
+            return null;
+        }
+
+        // Применим обновлённые поля и сохраним сделку
+        $lead->setCustomFieldsValues($customFields);
+        $amoClient->leads()->updateOne($lead);        
+    }
+
 }
